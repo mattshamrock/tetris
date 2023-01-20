@@ -18,22 +18,23 @@ winget --version
 ## v1.1.13405 等と出力されれば、Windows Package Manager(winget)がある
 ```
 
-gitをインストールする
+gitをインストールする。
 
 ```
 winget install Git.Git
+## もし y/n と出る場合は、y と入力する。y=yes という意味である。
 ```
 
-powershell上で以下を実行して結果が表示されればOK
+新しくpowershellを起動し、以下を実行して結果が表示されればOK
 
 ```
 git --version
-## ex.) git version 2.34.1.windows.1 等と出力されればOK
+## ex.) git version 2.34.1.windows.1 等と出力されればOK（最新バージョンであればOK）
 ```
 
 ### 上記でインストールができない場合
 
-公式サイトのインストーラーを使う。以下をダウンロードする。
+上記でインストールができない場合は、公式サイトのインストーラーを使う。以下をダウンロードする。
 
 > [git Downloading Git](https://git-scm.com/download/win)  
 > 64-bit Git for Windows Setup  
@@ -48,7 +49,7 @@ powershell上で以下を実行して結果が表示されればOK
 
 ```
 git --version
-## ex.) git version 2.34.1.windows.1 等と出力されればOK
+## ex.) git version 2.34.1.windows.1 等と出力されればOK（最新バージョンであればOK）
 ```
 
 ## 2. python のインストール
@@ -61,27 +62,31 @@ powershell上で以下を実行、もしくは`microsoft store`上で`python`と
 python
 ```
 
-![Screenshot](../pics/python3.9.msstore.png)
+![Screenshot](../pics/python3.10.msstore.png)
 
-powershell上で以下を実行して結果が表示されればOK
+新しくpowershellを起動し、以下を実行して結果が表示されればOK
 
 ```
 python --version
-## ex.) Python 3.9.9 等と出力されればOK
+## ex.) Python 3.10.9 等と出力されればOK（最新バージョンであればOK）
 ```
+
+### 古いバージョンのpythonが表示される場合
+
+過去に古いバージョンのpythonをインストールしている場合にそちらが優先される可能性がある。  
+「Windows」＋「python」で検索ボックスから古いpythonバージョンをアンインストールして再度新しいpythonをインストールすると解決することがある。
 
 ### 上記でインストールができない場合
 
-公式サイトのインストーラーを使う。  
+上記でインストールができない場合は、公式サイトのインストーラーを使う。  
 以下記事を参照し、パッケージのダウンロード～PowerShellの環境設定までを実施する
 
 > [Windows版Pythonのインストール](https://www.python.jp/install/windows/install.html)  
 
-2022.1時点ではpythonのバージョン3.9.9が利用し易そうである。  
+2023.1時点ではpythonのバージョン3.10.9が利用し易そうである。  
 この場合は、以下のダウンロードリンクからインストーラ(`.exe`)を取得するとよい。  
 
 > [非公式Pythonダウンロードリンク](https://pythonlinks.python.jp/ja/index.html)  
-> [python-3.9.9-amd64.exe](https://www.python.org/ftp/python/3.9.9/python-3.9.9-amd64.exe)
 
 特に以下の点を忘れずに実施する。
 
@@ -97,7 +102,7 @@ powershell上で以下を実行して結果が表示されればOK
 
 ```
 python --version
-## ex.) Python 3.9.9 等と出力されればOK
+## ex.) Python 3.10.9 等と出力されればOK（最新バージョンであればOK）
 ```
 
 ## 3. powershellからtetrisを実行する
@@ -111,9 +116,9 @@ powershellを新たに起動する
   
 ```
 git --version
-## ex.) git version 2.34.1.windows.1 等と出力されればOK
+## ex.) git version 2.34.1.windows.1 等と出力されればOK（最新バージョンであればOK）
 python --version
-## ex.) Python 3.9.9 等と出力されればOK
+## ex.) Python 3.10.9 等と出力されればOK（最新バージョンであればOK）
 ```
 
 必要なパッケージをインストールする
@@ -134,7 +139,7 @@ cd tetris
 python start.py  # ここでtetrisが表示されればOK
 ```
 
-## option. エディタのインストール
+### option. エディタのインストール
 
 最近流行りのエディタである`visual studio code`をインストールしておくと後のコード編集に便利である  
 powershell上でwingetが使える場合は以下を実行、  
@@ -153,6 +158,32 @@ powershell上で以下を実行して`vscode`と対象のコードが表示さ�
 ```
 # cd ~/work/tetris 等で事前にcloneした場所に移動しておく
 code game_manager/block_controller.py
+```
+
+### `python start.py`実行後にtetrisが表示されない場合
+
+実行環境の違いにより`python start.py`実行後にtetrisが表示されないことがたまにある。  
+この場合はwarningやエラーログが出力されるはずなので、以下の実行成功時のログと比較すると解決に近づくと思われる。
+
+```
+# （例）実行成功時のログ
+$ python start.py
+game_level: 1
+game_time: 180
+RANDOM_SEED: 0
+IS_MODE :default
+OBSTACLE_HEIGHT: 0
+OBSTACLE_PROBABILITY: 0
+USER_NAME: window_sample
+SHAPE_LIST_MAX: 6
+BLOCK_NUM_MAX: -1
+RESULT_LOG_JSON: result.json
+TRAIN_YAML: config/default.yaml
+PREDICT_WEIGHT: outputs/latest/best_weight.pt
+Python 3.7.1
+CompletedProcess(args='python --version', returncode=0, stderr='')
+=================================================>
+...(以降、tetrisデバッグ情報が表示される)
 ```
 
 ## 参考

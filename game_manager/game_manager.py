@@ -15,14 +15,17 @@ import time
 import json
 import pprint
 
-def get_option(game_time, mode, drop_interval, random_seed, obstacle_height, obstacle_probability, resultlogjson, user_name):
+################################
+# Option 取得
+###############################
+def get_option(game_time, mode, drop_interval, random_seed, obstacle_height, obstacle_probability, resultlogjson, train_yaml, predict_weight, user_name, ShapeListMax, BlockNumMax, art_config_filepath):
     argparser = ArgumentParser()
     argparser.add_argument('--game_time', type=int,
                            default=game_time,
                            help='Specify game time(s)')
     argparser.add_argument('--mode', type=str,
                            default=mode,
-                           help='Specify mode (keyboard/gamepad/sample/train) if necessary')
+                           help='Specify mode (keyboard/gamepad/sample/train/art) if necessary')
     argparser.add_argument('--drop_interval', type=int,
                            default=drop_interval,
                            help='Specify drop_interval(s)')
@@ -38,11 +41,32 @@ def get_option(game_time, mode, drop_interval, random_seed, obstacle_height, obs
     argparser.add_argument('--resultlogjson', type=str,
                            default=resultlogjson,
                            help='result json log file path')
+    argparser.add_argument('--train_yaml', type=str,
+                           default=train_yaml,
+                           help='yaml file for machine learning')
+    argparser.add_argument('--predict_weight', type=str,
+                           default=predict_weight,
+                           help='weight file for machine learning')
     argparser.add_argument('-u', '--user_name', type=str,
                            default=user_name,
                            help='Specigy user name if necessary')
+    argparser.add_argument('--ShapeListMax', type=int,
+                           default=ShapeListMax,
+                           help='Specigy NextShapeNumberMax if necessary')
+    argparser.add_argument('--BlockNumMax', type=int,
+                           default=BlockNumMax,
+                           help='Specigy BlockNumMax if necessary')
+    argparser.add_argument('--art_config_filepath', type=str,
+                           default=art_config_filepath,
+                           help='art_config file path')
+
     return argparser.parse_args()
 
+#####################################################################
+#####################################################################
+# Game Manager
+#####################################################################
+#####################################################################
 class Game_Manager(QMainWindow):
 
     # a[n] = n^2 - n + 1
@@ -52,6 +76,9 @@ class Game_Manager(QMainWindow):
     LINE_SCORE_4 = 1300
     GAMEOVER_SCORE = -500
 
+    ###############################################
+    # 初期化
+    ###############################################
     def __init__(self):
         super().__init__()
         self.isStarted = False
@@ -66,8 +93,14 @@ class Game_Manager(QMainWindow):
         self.random_seed = time.time() * 10000000 # 0
         self.obstacle_height = 0
         self.obstacle_probability = 0
+        self.ShapeListMax = 6
+        self.BlockNumMax = -1
         self.resultlogjson = ""
         self.user_name = ""
+        self.train_yaml = None
+        self.predict_weight = None
+        self.art_config_filepath = None
+        
         args = get_option(self.game_time,
                           self.mode,
                           self.drop_interval,
@@ -75,10 +108,15 @@ class Game_Manager(QMainWindow):
                           self.obstacle_height,
                           self.obstacle_probability,
                           self.resultlogjson,
-                          self.user_name)
+                          self.train_yaml,
+                          self.predict_weight,
+                          self.user_name,
+                          self.ShapeListMax,
+                          self.BlockNumMax,
+                          self.art_config_filepath)
         if args.game_time >= 0:
             self.game_time = args.game_time
-        if args.mode in ("keyboard", "gamepad", "sample", "train"):
+        if args.mode in ("keyboard", "gamepad", "sample", "art", "train", "predict", "train_sample", "predict_sample", "train_sample2", "predict_sample2"):
             self.mode = args.mode
         if args.drop_interval >= 0:
             self.drop_interval = args.drop_interval
@@ -92,10 +130,30 @@ class Game_Manager(QMainWindow):
             self.resultlogjson = args.resultlogjson
         if len(args.user_name) != 0:
             self.user_name = args.user_name
-        self.initUI()
+        if args.ShapeListMax > 0:
+            self.ShapeListMax = args.ShapeListMax
+        
+        if args.BlockNumMax > 0:
+            self.BlockNumMax = args.BlockNumMax
+        if args.train_yaml.endswith('.yaml'):
 
+            self.train_yaml = args.train_yaml        
+        if args.predict_weight != "default":
+            self.predict_weight = args.predict_weight
+        if args.art_config_filepath.endswith('.json'):
+            self.art_config_filepath = args.art_config_filepath      
+            
+        self.initUI()
+        
+    ###############################################
+    # UI 初期化
+    ###############################################
     def initUI(self):
         self.gridSize = 22
+        self.NextShapeYOffset = 90
+        # display maximum 4 next blocks
+        self.NextShapeMaxAppear = min(4, self.ShapeListMax - 1)
+
         self.speed = self.drop_interval # block drop speed
 
         self.timer = QBasicTimer()
@@ -108,10 +166,12 @@ class Game_Manager(QMainWindow):
                             self.game_time,
                             random_seed_Nextshape,
                             self.obstacle_height,
-                            self.obstacle_probability)
+                            self.obstacle_probability,
+                            self.ShapeListMax,
+                            self.art_config_filepath)
         hLayout.addWidget(self.tboard)
 
-        self.sidePanel = SidePanel(self, self.gridSize)
+        self.sidePanel = SidePanel(self, self.gridSize, self.NextShapeYOffset, self.NextShapeMaxAppear)
         hLayout.addWidget(self.sidePanel)
 
         self.statusbar = self.statusBar()
@@ -130,22 +190,33 @@ class Game_Manager(QMainWindow):
         self.setFixedSize(self.tboard.width() + self.sidePanel.width(),
                           self.sidePanel.height() + self.statusbar.height())
 
+    ###############################################
+    # Window を中心へ移動
+    ###############################################
     def center(self):
         screen = QDesktopWidget().screenGeometry()
         size = self.geometry()
         self.move((screen.width() - size.width()) // 2, (screen.height() - size.height()) // 2)
 
+    ###############################################
+    # 開始
+    ###############################################
     def start(self):
         if self.isPaused:
             return
 
         self.isStarted = True
         self.tboard.score = 0
+        ##画面ボードと現テトリミノ情報をクリア
         BOARD_DATA.clear()
+        ## 新しい予告テトリミノ配列作成
         BOARD_DATA.createNewPiece()
         self.tboard.msg2Statusbar.emit(str(self.tboard.score))
         self.timer.start(self.speed, self)
 
+    ###############################################
+    # ポーズ
+    ###############################################
     def pause(self):
         if not self.isStarted:
             return
@@ -160,18 +231,48 @@ class Game_Manager(QMainWindow):
 
         self.updateWindow()
 
+    ###############################################
+    # ゲームリセット (ゲームオーバー)
+    ###############################################
     def resetfield(self):
         # self.tboard.score = 0
         self.tboard.reset_cnt += 1
         self.tboard.score += Game_Manager.GAMEOVER_SCORE
+        ##画面ボードと現テトリミノ情報をクリア
         BOARD_DATA.clear()
+        ## 新しい予告テトリミノ配列作成
+        BOARD_DATA.createNewPiece()
+        
+
+    ###############################################
+    # 画面リセット
+    ###############################################
+    def reset_all_field(self):
+        # reset all field for debug
+        # this function is mainly for machine learning
+        self.tboard.reset_cnt = 0
+        self.tboard.score = 0
+        self.tboard.dropdownscore = 0
+        self.tboard.linescore = 0
+        self.tboard.line = 0
+        self.tboard.line_score_stat = [0, 0, 0, 0]
+        self.tboard.start_time = time.time()
+        ##画面ボードと現テトリミノ情報をクリア
+        BOARD_DATA.clear()
+        ## 新しい予告テトリミノ配列作成
         BOARD_DATA.createNewPiece()
 
+    ###############################################
+    # Window 情報 UPDATE
+    ###############################################
     def updateWindow(self):
         self.tboard.updateData()
         self.sidePanel.updateData()
         self.update()
 
+    ###############################################
+    # タイマーイベント
+    ###############################################
     def timerEvent(self, event):
         # callback function for user control
 
@@ -192,34 +293,89 @@ class Game_Manager(QMainWindow):
                                   "x": "none",            # next x position (range: 0 - (witdh-1) )
                                   "y_operation": "none",  # movedown or dropdown (0:movedown, 1:dropdown)
                                   "y_moveblocknum": "none", # amount of next y movement
-                                  },
+                                  "use_hold_function": "n", # use hold function (y:yes, n:no)
+                                },
+                            "option":
+                                { "reset_callback_function_addr":None,
+                                  "reset_all_field": None,
+                                  "force_reset_field": None,
+                                }
                             }
                 # get nextMove from GameController
                 GameStatus = self.getGameStatus()
 
                 if self.mode == "sample":
+                    # sample
                     self.nextMove = BLOCK_CONTROLLER_SAMPLE.GetNextMove(nextMove, GameStatus)
+
+                elif self.mode == "train_sample" or self.mode == "predict_sample":
+                    # sample train/predict
+                    # import block_controller_train_sample, it's necessary to install pytorch to use.
+                    from machine_learning.block_controller_train_sample import BLOCK_CONTROLLER_TRAIN_SAMPLE as BLOCK_CONTROLLER_TRAIN
+                    self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file=self.train_yaml,weight=self.predict_weight)
+                    
+                elif self.mode == "train_sample2" or self.mode == "predict_sample2":
+                    # sample train/predict
+                    # import block_controller_train_sample, it's necessary to install pytorch to use.
+                    from machine_learning.block_controller_train_sample2 import BLOCK_CONTROLLER_TRAIN_SAMPLE2 as BLOCK_CONTROLLER_TRAIN
+                    self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file="config/train_sample2.yaml",weight=self.predict_weight)
+                    
+                elif self.mode == "train" or self.mode == "predict":
+                    # train/predict
+                    # import block_controller_train, it's necessary to install pytorch to use.
+                    from machine_learning.block_controller_train import BLOCK_CONTROLLER_TRAIN
+                    self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file=self.train_yaml,weight=self.predict_weight)
+                elif self.mode == "art":
+                    # art
+                    # print GameStatus
+                    import pprint
+                    print("=================================================>")
+                    pprint.pprint(GameStatus, width = 61, compact = True)
+                    # get direction/x/y from art_config
+                    d,x,y = BOARD_DATA.getnextShapeIndexListDXY(self.block_index-1)
+                    nextMove["strategy"]["direction"] = d
+                    nextMove["strategy"]["x"] = x
+                    nextMove["strategy"]["y_operation"] = y
+                    self.nextMove = nextMove
                 else:
                     self.nextMove = BLOCK_CONTROLLER.GetNextMove(nextMove, GameStatus)
 
                 if self.mode in ("keyboard", "gamepad"):
                     # ignore nextMove, for keyboard/gamepad controll
                     self.nextMove["strategy"]["x"] = BOARD_DATA.currentX
+                    # Move Down 数
                     self.nextMove["strategy"]["y_moveblocknum"] = 1
+                    # Drop Down:1, Move Down:0
                     self.nextMove["strategy"]["y_operation"] = 0
+                    # テトリミノ回転数
                     self.nextMove["strategy"]["direction"] = BOARD_DATA.currentDirection
 
+            #######################
+            ## 次の手を動かす
             if self.nextMove:
                 # shape direction operation
                 next_x = self.nextMove["strategy"]["x"]
+                # Move Down 数
                 next_y_moveblocknum = self.nextMove["strategy"]["y_moveblocknum"]
+                # Drop Down:1, Move Down:0
                 y_operation = self.nextMove["strategy"]["y_operation"]
+                # テトリミノ回転数
                 next_direction = self.nextMove["strategy"]["direction"]
+                use_hold_function = self.nextMove["strategy"]["use_hold_function"]
+
+                # if use_hold_function
+                if use_hold_function == "y":
+                    isExchangeHoldShape = BOARD_DATA.exchangeholdShape()
+                    if isExchangeHoldShape == False:
+                        # if isExchangeHoldShape is False, this means no holdshape exists. 
+                        # so it needs to return immediately to use new shape.
+                        return
+
                 k = 0
                 while BOARD_DATA.currentDirection != next_direction and k < 4:
                     ret = BOARD_DATA.rotateRight()
                     if ret == False:
-                        print("cannot rotateRight")
+                        #print("cannot rotateRight")
                         break
                     k += 1
                 # x operation
@@ -228,12 +384,12 @@ class Game_Manager(QMainWindow):
                     if BOARD_DATA.currentX > next_x:
                         ret = BOARD_DATA.moveLeft()
                         if ret == False:
-                            print("cannot moveLeft")
+                            #print("cannot moveLeft")
                             break
                     elif BOARD_DATA.currentX < next_x:
                         ret = BOARD_DATA.moveRight()
                         if ret == False:
-                            print("cannot moveRight")
+                            #print("cannot moveRight")
                             break
                     k += 1
 
@@ -241,11 +397,15 @@ class Game_Manager(QMainWindow):
             dropdownlines = 0
             removedlines = 0
             if y_operation == 1: # dropdown
+                ## テトリミノを一番下まで落とす
                 removedlines, dropdownlines = BOARD_DATA.dropDown()
             else: # movedown, with next_y_moveblocknum lines
                 k = 0
+                # Move down を1つずつ処理
                 while True:
+                    ## テノリミノを1つ落とし消去ラインとテトリミノ落下数を返す
                     removedlines, movedownlines = BOARD_DATA.moveDown()
+                    # Drop してたら除外 (テトリミノが1つも落下していない場合)
                     if movedownlines < 1:
                         # if already dropped
                         break
@@ -254,24 +414,43 @@ class Game_Manager(QMainWindow):
                         # if already movedown next_y_moveblocknum block
                         break
 
+            # 消去ライン数と落下数によりスコア計算
             self.UpdateScore(removedlines, dropdownlines)
 
+            ##############################
+            #
             # check reset field
-            if BOARD_DATA.currentY < 1:
+            #if BOARD_DATA.currentY < 1: 
+            if BOARD_DATA.currentY < 1 or self.nextMove["option"]["force_reset_field"] == True:
                 # if Piece cannot movedown and stack, reset field
-                print("reset field.")
-                self.resetfield()
+                if self.nextMove["option"]["reset_callback_function_addr"] != None:
+                    # if necessary, call reset_callback_function
+                    reset_callback_function = self.nextMove["option"]["reset_callback_function_addr"]
+                    reset_callback_function()
+
+                if self.nextMove["option"]["reset_all_field"] == True:
+                    # reset all field if debug option is enabled
+                    print("reset all field.")
+                    self.reset_all_field()
+                else:
+                    # ゲームリセット = ゲームオーバー
+                    self.resetfield()
 
             # init nextMove
             self.nextMove = None
 
             # update window
             self.updateWindow()
+            return
         else:
             super(Game_Manager, self).timerEvent(event)
 
+    ###############################################
+    # 消去ライン数と落下数によりスコア計算
+    ###############################################
     def UpdateScore(self, removedlines, dropdownlines):
         # calculate and update current score
+        # 消去ライン数で計算
         if removedlines == 1:
             linescore = Game_Manager.LINE_SCORE_1
         elif removedlines == 2:
@@ -282,14 +461,20 @@ class Game_Manager(QMainWindow):
             linescore = Game_Manager.LINE_SCORE_4
         else:
             linescore = 0
+        # 落下スコア計算
         dropdownscore = dropdownlines
         self.tboard.dropdownscore += dropdownscore
+        # 合計計算
         self.tboard.linescore += linescore
         self.tboard.score += ( linescore + dropdownscore )
         self.tboard.line += removedlines
+        # 同時消去数をカウント
         if removedlines > 0:
             self.tboard.line_score_stat[removedlines - 1] += 1
 
+    ###############################################
+    # ゲーム情報の取得
+    ###############################################
     def getGameStatus(self):
         # return current Board status.
         # define status data.
@@ -315,6 +500,13 @@ class Game_Manager(QMainWindow):
                            "index":"none",
                            "direction_range":"none",
                         },
+                        "nextShapeList":{
+                        },
+                        "holdShape":{
+                           "class":"none",
+                           "index":"none",
+                           "direction_range":"none",
+                        },
                       },
                   "judge_info":
                       {
@@ -324,6 +516,7 @@ class Game_Manager(QMainWindow):
                         "score":"none",
                         "line":"none",
                         "block_index":"none",
+                        "block_num_max":"none",
                         "mode":"none",
                       },
                   "debug_info":
@@ -388,26 +581,31 @@ class Game_Manager(QMainWindow):
         status["block_info"]["currentX"] = BOARD_DATA.currentX
         status["block_info"]["currentY"] = BOARD_DATA.currentY
         status["block_info"]["currentDirection"] = BOARD_DATA.currentDirection
-        status["block_info"]["currentShape"]["class"] = BOARD_DATA.currentShape
-        status["block_info"]["currentShape"]["index"] = BOARD_DATA.currentShape.shape
         ### current shape
-        if BOARD_DATA.currentShape.shape in (Shape.shapeI, Shape.shapeZ, Shape.shapeS):
-            Range = (0, 1)
-        elif BOARD_DATA.currentShape.shape == Shape.shapeO:
-            Range = (0,)
-        else:
-            Range = (0, 1, 2, 3)
-        status["block_info"]["currentShape"]["direction_range"] = Range
+        currentShapeClass, currentShapeIdx, currentShapeRange = BOARD_DATA.getShapeData(0)
+        status["block_info"]["currentShape"]["class"] = currentShapeClass
+        status["block_info"]["currentShape"]["index"] = currentShapeIdx
+        status["block_info"]["currentShape"]["direction_range"] = currentShapeRange
         ### next shape
-        status["block_info"]["nextShape"]["class"] = BOARD_DATA.nextShape
-        status["block_info"]["nextShape"]["index"] = BOARD_DATA.nextShape.shape
-        if BOARD_DATA.nextShape.shape in (Shape.shapeI, Shape.shapeZ, Shape.shapeS):
-            Range = (0, 1)
-        elif BOARD_DATA.nextShape.shape == Shape.shapeO:
-            Range = (0,)
-        else:
-            Range = (0, 1, 2, 3)
-        status["block_info"]["nextShape"]["direction_range"] = Range
+        nextShapeClass, nextShapeIdx, nextShapeRange = BOARD_DATA.getShapeData(1)
+        status["block_info"]["nextShape"]["class"] = nextShapeClass
+        status["block_info"]["nextShape"]["index"] = nextShapeIdx
+        status["block_info"]["nextShape"]["direction_range"] = nextShapeRange
+        ### next shape list
+        for i in range(BOARD_DATA.getShapeListLength()):
+            ElementNo="element" + str(i)
+            ShapeClass, ShapeIdx, ShapeRange = BOARD_DATA.getShapeData(i)
+            status["block_info"]["nextShapeList"][ElementNo] = {
+                "class":ShapeClass,
+                "index":ShapeIdx,
+                "direction_range":ShapeRange,
+            }
+        ### hold shape
+        holdShapeClass, holdShapeIdx, holdShapeRange = BOARD_DATA.getholdShapeData()
+        status["block_info"]["holdShape"]["class"] = holdShapeClass
+        status["block_info"]["holdShape"]["index"] = holdShapeIdx
+        status["block_info"]["holdShape"]["direction_range"] = holdShapeRange
+        ### next shape
         ## judge_info
         status["judge_info"]["elapsed_time"] = round(time.time() - self.tboard.start_time, 3)
         status["judge_info"]["game_time"] = self.game_time
@@ -415,6 +613,7 @@ class Game_Manager(QMainWindow):
         status["judge_info"]["score"] = self.tboard.score
         status["judge_info"]["line"] = self.tboard.line
         status["judge_info"]["block_index"] = self.block_index
+        status["judge_info"]["block_num_max"] = self.BlockNumMax
         status["judge_info"]["mode"] = self.mode
         ## debug_info
         status["debug_info"]["dropdownscore"] = self.tboard.dropdownscore
@@ -444,7 +643,7 @@ class Game_Manager(QMainWindow):
         status["debug_info"]["random_seed"] = self.random_seed
         status["debug_info"]["obstacle_height"] = self.obstacle_height
         status["debug_info"]["obstacle_probability"] = self.obstacle_probability
-        if BOARD_DATA.currentShape == Shape.shapeNone:
+        if currentShapeIdx == Shape.shapeNone:
             print("warning: current shape is none !!!")
 
         return status
@@ -505,6 +704,7 @@ class Game_Manager(QMainWindow):
                         "score":"none",
                         "line":"none",
                         "block_index":"none",
+                        "block_num_max":"none",
                         "mode":"none",
                       },
                   }
@@ -539,12 +739,18 @@ class Game_Manager(QMainWindow):
         status["judge_info"]["score"] = self.tboard.score
         status["judge_info"]["line"] = self.tboard.line
         status["judge_info"]["block_index"] = self.block_index
+        status["judge_info"]["block_num_max"] = self.BlockNumMax
         status["judge_info"]["mode"] = self.mode
         return json.dumps(status)
 
+    ###############################################
+    # キー入力イベント処理 -m keyboard, gamepad
+    # QMainWindow 継承
+    ###############################################
     def keyPressEvent(self, event):
         # for keyboard/gamepad control
 
+        # スタート前はキーキャプチャしない
         if not self.isStarted or BOARD_DATA.currentShape == Shape.shapeNone:
             super(Game_Manager, self).keyPressEvent(event)
             return
@@ -569,20 +775,29 @@ class Game_Manager(QMainWindow):
         elif (key == Qt.Key_Up and self.mode == 'keyboard') or (key == Qt.Key_Space and self.mode == 'gamepad'):
             BOARD_DATA.rotateLeft()
         elif key == Qt.Key_M:
+            ## テノリミノを1つ落とし消去ラインとテトリミノ落下数を返す
             removedlines, movedownlines = BOARD_DATA.moveDown()
+            # 消去ライン数によりスコア計算
             self.UpdateScore(removedlines, 0)
         elif (key == Qt.Key_Space and self.mode == 'keyboard') or (key == Qt.Key_Up and self.mode == 'gamepad'):
+            ## テトリミノを一番下まで落とす
             removedlines, dropdownlines = BOARD_DATA.dropDown()
+            # 消去ライン数と落下数によりスコア計算
             self.UpdateScore(removedlines, dropdownlines)
+        elif key == Qt.Key_C:
+            BOARD_DATA.exchangeholdShape()
         else:
+            # スタート前はキーキャプチャしない
             super(Game_Manager, self).keyPressEvent(event)
 
         self.updateWindow()
 
 
+###############################################
+# 四角形の描画
+###############################################
 def drawSquare(painter, x, y, val, s):
-    colorTable = [0x000000, 0xCC6666, 0x66CC66, 0x6666CC,
-                  0xCCCC66, 0xCC66CC, 0x66CCCC, 0xDAAA00]
+    colorTable = BOARD_DATA.getcolorTable()
 
     # treat values as integer explicitly
     x = int(x)
@@ -605,39 +820,98 @@ def drawSquare(painter, x, y, val, s):
     painter.drawLine(x + s - 1, y + s - 1, x + s - 1, y + 1)
 
 
+###############################################
+###############################################
+# 横画面描画
+###############################################
+###############################################
 class SidePanel(QFrame):
-    def __init__(self, parent, gridSize):
+    ###############################################
+    # 初期化
+    ###############################################
+    def __init__(self, parent, gridSize, NextShapeYOffset, NextShapeMaxAppear):
         super().__init__(parent)
         self.setFixedSize(gridSize * 5, gridSize * BOARD_DATA.height)
         self.move(gridSize * BOARD_DATA.width, 0)
         self.gridSize = gridSize
+        self.NextShapeYOffset = NextShapeYOffset
+        self.NextShapeMaxAppear = NextShapeMaxAppear
 
+    ###############################################
+    # UPDATE
+    ###############################################
     def updateData(self):
         self.update()
 
+    ###############################################
+    # 描画イベント
+    ###############################################
     def paintEvent(self, event):
         painter = QPainter(self)
-        minX, maxX, minY, maxY = BOARD_DATA.nextShape.getBoundingOffsets(0)
 
-        dy = 3 * self.gridSize
-        dx = (self.width() - (maxX - minX) * self.gridSize) / 2
+        ShapeListLength = BOARD_DATA.getShapeListLength()
+        
+        # draw next shape
+        for i in range(ShapeListLength):
+            if i == 0:
+                # skip current shape
+                continue
+            if i > self.NextShapeMaxAppear:
+                break
 
-        val = BOARD_DATA.nextShape.shape
-        for x, y in BOARD_DATA.nextShape.getCoords(0, 0, -minY):
-            drawSquare(painter, x * self.gridSize + dx, y * self.gridSize + dy, val, self.gridSize)
+            ShapeClass, ShapeIdx, ShapeRange = BOARD_DATA.getShapeData(i) # nextShape
 
+            # テトリミノが原点から x,y 両方向に最大何マス占有するのか取得
+            minX, maxX, minY, maxY = ShapeClass.getBoundingOffsets(0)
 
+            dy = 1 * self.gridSize
+            dx = (self.width() - (maxX - minX) * self.gridSize) / 2
+            
+            val = ShapeClass.shape
+            y_offset = self.NextShapeYOffset * (i - 1) #(self.NextShapeMaxAppear - i)
+            # テトリミノを配置すべき座標リストを取得していく
+            for x, y in ShapeClass.getCoords(0, 0, -minY):
+                drawSquare(painter, x * self.gridSize + dx, y * self.gridSize + dy + y_offset, val, self.gridSize)
+
+        # draw hold block area
+        painter.setPen(QColor(0x777777))
+        height_offset = self.height() - int(self.gridSize*4.65)
+        painter.drawLine(0, height_offset,
+                         self.width(), height_offset)
+        painter.drawText(0, self.height(), 'HOLD');
+        holdShapeClass, holdShapeIdx, holdShapeRange = BOARD_DATA.getholdShapeData()
+        if holdShapeClass != None:
+            # if holdShape exists, try to draw
+            minX, maxX, minY, maxY = holdShapeClass.getBoundingOffsets(0)
+            dy = 1 * self.gridSize
+            dx = (self.width() - (maxX - minX) * self.gridSize) / 2
+            val = holdShapeClass.shape
+            y_offset = self.NextShapeYOffset * 4
+            for x, y in holdShapeClass.getCoords(0, 0, -minY):
+                drawSquare(painter, x * self.gridSize + dx, y * self.gridSize + dy + y_offset, val, self.gridSize)
+
+#####################################################################
+#####################################################################
+# 画面ボード描画
+#####################################################################
+#####################################################################
 class Board(QFrame):
     msg2Statusbar = pyqtSignal(str)
 
-    def __init__(self, parent, gridSize, game_time, random_seed, obstacle_height, obstacle_probability):
+    ###############################################
+    # 初期化
+    ###############################################
+    def __init__(self, parent, gridSize, game_time, random_seed, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath):
         super().__init__(parent)
         self.setFixedSize(gridSize * BOARD_DATA.width, gridSize * BOARD_DATA.height)
         self.gridSize = gridSize
         self.game_time = game_time
-        self.initBoard(random_seed, obstacle_height, obstacle_probability)
+        self.initBoard(random_seed, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath)
 
-    def initBoard(self, random_seed_Nextshape, obstacle_height, obstacle_probability):
+    ###############################################
+    # 画面ボード初期化
+    ###############################################
+    def initBoard(self, random_seed_Nextshape, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath):
         self.score = 0
         self.dropdownscore = 0
         self.linescore = 0
@@ -645,10 +919,16 @@ class Board(QFrame):
         self.line_score_stat = [0, 0, 0, 0]
         self.reset_cnt = 0
         self.start_time = time.time() 
+        ##画面ボードと現テトリミノ情報をクリア
         BOARD_DATA.clear()
         BOARD_DATA.init_randomseed(random_seed_Nextshape)
         BOARD_DATA.init_obstacle_parameter(obstacle_height, obstacle_probability)
+        BOARD_DATA.init_shape_parameter(ShapeListMax)
+        BOARD_DATA.init_art_config(art_config_filepath)
 
+    ###############################################
+    # 描画イベント
+    ###############################################
     def paintEvent(self, event):
         painter = QPainter(self)
 
@@ -669,6 +949,9 @@ class Board(QFrame):
         painter.setPen(QColor(0xCCCCCC))
         painter.drawLine(self.width(), 0, self.width(), self.height())
 
+    ###############################################
+    # ログファイル出力
+    ###############################################
     def OutputLogData(self, isPrintLog):
         log_file_path = GAME_MANEGER.resultlogjson
         if len(log_file_path) != 0:
@@ -679,6 +962,9 @@ class Board(QFrame):
                 GameStatusJson = GAME_MANEGER.getGameStatusJson()
                 f.write(GameStatusJson)
 
+    ###############################################
+    # データ更新
+    ###############################################
     def updateData(self):
         score_str = str(self.score)
         line_str = str(self.line)
@@ -686,17 +972,27 @@ class Board(QFrame):
         elapsed_time = round(time.time() - self.start_time, 3)
         elapsed_time_str = str(elapsed_time)
         status_str = "score:" + score_str + ",line:" + line_str + ",gameover:" + reset_cnt_str + ",time[s]:" + elapsed_time_str
+
+        # get gamestatus info
+        GameStatus = GAME_MANEGER.getGameStatus()
+        current_block_index = GameStatus["judge_info"]["block_index"]
+        BlockNumMax = GameStatus["judge_info"]["block_num_max"]
+
         # print string to status bar
         self.msg2Statusbar.emit(status_str)
         self.update()
         self.OutputLogData(isPrintLog = False)
 
         if self.game_time == -1:
-            print("game_time: {}".format(self.game_time))
-            print("endless loop")
-        elif self.game_time >= 0 and elapsed_time > self.game_time - 0.5:
+            pass
+            #print("game_time: {}".format(self.game_time))
+            #print("endless loop")
+        elif (self.game_time >= 0 and elapsed_time >= self.game_time) or (current_block_index == BlockNumMax):
             # finish game.
-            print("game finish!! elapsed time: " + elapsed_time_str + "/game_time: " + str(self.game_time))
+            # 1. if elapsed_time beyonds given game_time.
+            # 2. if current_block_index beyonds given BlockNumMax.
+            print("game finish!! elapsed time: " + elapsed_time_str + "/game_time: " + str(self.game_time) \
+                  + ", " + "current_block_index: " + str(current_block_index) + "/BlockNumMax: " + str(BlockNumMax))
             print("")
             print("##### YOUR_RESULT #####")
             print(status_str)
