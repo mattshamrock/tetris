@@ -614,8 +614,19 @@ class Block_Controller(object):
             i += 1
         print("total scenario considered is : ", i)
 
+        if self.Elapsed_Time >= 178:
+            bestscenario =  scenario0[0]
+        elif self.Elapsed_Time >= 177:
+            bestscenario =  scenario1[0]
+        elif self.Elapsed_Time >= 176:
+            bestscenario =  scenario2[0]
+        elif self.Elapsed_Time >= 175:
+            bestscenario =  scenario3[0]
+        elif self.Elapsed_Time >= 174:
+            bestscenario =  scenario4[0]
+        else:
+            bestscenario = scenario5[0]   
 
-        bestscenario = scenario5[0]
         print("bestscenario : ", bestscenario)
         # search best nextMove -->
         # random sample
@@ -748,7 +759,7 @@ class Block_Controller(object):
 
         #evaluation for fullLines is cumulative
         if self.Elapsed_Time >= 175:
-            fulLscore = [0,100, 500 , 1000, 10000]
+            fulLscore = [0,100, 10000 , 20000, 30000]
         else:
             fulLscore = [0,-5000,-1000,-500,10000]
         for rnd in range(Round + 1):
