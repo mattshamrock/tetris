@@ -73,7 +73,7 @@ class Block_Controller(object):
 
         #Get current dy 
         field_board = GameStatus["field_info"]["backboard"]
-        pprint.pprint(field_board, width = 31, compact = True)
+        #pprint.pprint(field_board, width = 31, compact = True)
         cur_board = [0,22,22,22,22,22,22,22,22,22,22,0]
         for x in range(10):
             for y in range(22):
@@ -82,11 +82,11 @@ class Block_Controller(object):
                     cur_board[x+1] -= 1
                 else:
                     break
-        print("cur_board : ",cur_board)
+        #print("cur_board : ",cur_board)
         cur_dy = [0,0,0,0,0,0,0,0,0,0,0]
         for i in range(11):
             cur_dy[i] = cur_board[i+1] - cur_board[i]
-        print("cur_dy : ",cur_dy)
+        #print("cur_dy : ",cur_dy)
 
         #[0:"trial_id", 1:shapeindex, 2:direction, 3:Xcoord, 4:"y/n", 5:hldindex, 6:EvalValue, 7:nHoles, 8:nLines] 6:dyList
         test_cond = [["00000",0,0,0,"n",None,-100,0,0],
@@ -602,17 +602,6 @@ class Block_Controller(object):
           
         scenario5.sort(reverse = True, key = lambda x:x[Round][6])
 
-
-
-
-
-        #print some of the best 
-        i = 0
-        for eachsce in scenario5:
-            if i <3:
-                print(eachsce)
-            i += 1
-        print("total scenario considered is : ", i)
 
         if self.Elapsed_Time >= 178:
             bestscenario =  scenario0[0]
