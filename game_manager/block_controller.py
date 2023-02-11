@@ -808,7 +808,7 @@ class Block_Controller(object):
 
 
         #level 2 =============================
-        #"""
+        """
         if self.block_number >= 177:
             fulLscore = [0, 1000, 4000, 10000, 20000]
             sc_nHoles_cml = -50
@@ -838,11 +838,11 @@ class Block_Controller(object):
             sc_nHoles_cml = -10000
             sc_hldOne = 3000
             sc_capacity = 0
-        #"""
+        """
 
 
         #level 3 =============================
-        """
+        #"""
         if self.block_number >= 177:
             fulLscore = [0, 1000, 4000, 10000, 20000]
             sc_nHoles_cml = -50
@@ -872,7 +872,7 @@ class Block_Controller(object):
             sc_nHoles_cml = -10000
             sc_hldOne = 3000
             sc_capacity = 0
-        """
+        #"""
         #calc score
         score = 0
         for rnd in range(Round + 1):
