@@ -622,10 +622,6 @@ class Block_Controller(object):
           
         scenario5.sort(reverse = True, key = lambda x:x[Round][6])
 
-        #print some of the best 
-        lengths = len(scenario0)+len(scenario1)+len(scenario2)+len(scenario3)+len(scenario4)+len(scenario5)
-
-
         if self.block_number >= 179:
             bestscenario =  scenario0[0]
         elif self.block_number >= 178:
@@ -647,26 +643,6 @@ class Block_Controller(object):
         nextMove["strategy"]["y_moveblocknum"] = 1
         nextMove["strategy"]["use_hold_function"] = bestscenario[0][4]
         # search best nextMove <--
-
-        """
-        #★★★★★★★★★★★★★★★★ to be deleted　★★★★★★★★★★★★★★★★★★★★★★★★
-        path = '..\\tetris\\game_manager\\log_board.txt'
-        with open (path, mode ="a") as f:
-            f.write("\n")
-            f.write(str(bestscenario[6])+str(bestscenario[0])+str(bestscenario[1])+str(bestscenario[2])+str(bestscenario[3])+str(bestscenario[4])+str(bestscenario[5]) + "\n")
-            f.write(str(scenario5[1][6])+str(scenario5[1][0])+str(scenario5[1][1])+str(scenario5[1][2])+str(scenario5[1][3])+str(scenario5[1][4])+str(scenario5[1][5])+ "\n")
-            f.write(str(scenario5[2][6])+str(scenario5[2][0])+str(scenario5[2][1])+str(scenario5[2][2])+str(scenario5[2][3])+str(scenario5[2][4])+str(scenario5[2][5])+ "\n")
-
-        path = '..\\tetris\\game_manager\\log_time.txt'
-        self.RDseed = GameStatus["debug_info"]["random_seed"]
-        with open (path, mode ="a") as f:
-            f.write("\n")
-            f.write(str(self.RDseed)+ "=== " + str(datetime.now() - t1) + " ___ total scenario : " +str(lengths))
-        #★★★★★★★★★★★★★★★★ to be deleted　★★★★★★★★★★★★★★★★★★★★★★★★
-        """
-        
-        # return nextMove
-        #print("===", datetime.now() - t1, "___ total scenario : ", lengths)
 
         #print("nextMove is ",nextMove)
         return nextMove
