@@ -88,7 +88,6 @@ class Block_Controller(object):
             cur_dy[i] = cur_board[i+1] - cur_board[i]
         #print("cur_dy : ",cur_dy)
         """
-
         #★★★★★★★★★★★★★★★★ to be deleted　★★★★★★★★★★★★★★★★★★★★★★★★
         path = '..\\tetris\\game_manager\\log_board.txt'
         with open (path, mode ="a") as f:
@@ -100,12 +99,10 @@ class Block_Controller(object):
                     boardElmt = field_board[y*10+x] 
                     f.write(str(boardElmt).replace("0","_")+" "
                     )  
-
             f.write("\n" + "cur_board : " + str(cur_board) + "\n")
             f.write(str(cur_dy) + "\n")
         #★★★★★★★★★★★★★★★★ to be deleted　★★★★★★★★★★★★★★★★★★★★★★★★
         """
-
 
         #[0:"trial_id", 1:shapeindex, 2:direction, 3:Xcoord, 4:"y/n", 5:hldindex, 6:EvalValue, 7:nHoles, 8:nLines] 6:dyList
         test_cond = [["00000",0,0,0,"n",None,-100,0,0],
@@ -777,16 +774,10 @@ class Block_Controller(object):
         sc_deepgap = -3000
         sc_gap = -1000
 
-        if self.block_number >= 177:
-            fulLscore = [0, 1000, 4000, 10000, 20000]
+        if self.block_number >= 172:
+            fulLscore = [0, -1000, -4000, 10000, 20000]
             sc_nHoles_cml = -50
             sc_mid = -50
-            sc_hldOne = 100
-
-        elif self.block_number >= 175  or self.maxY >= 10:
-            fulLscore = [0, -100, 3000, 10000, 20000]
-            sc_nHoles_cml = -800
-            sc_mid = -100
             sc_hldOne = 100
 
         else:
@@ -799,6 +790,9 @@ class Block_Controller(object):
         score = 0
         for rnd in range(Round + 1):
             score += fulLscore[test_cond[rnd][8]]
+            if test_cond[rnd][8] != 0:
+                score -= rnd*4 #earlier the better
+
         score += absdy * sc_absdy
         score += deepgap * sc_deepgap
         score += gap * sc_gap
