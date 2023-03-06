@@ -134,7 +134,7 @@ class Game_Manager(QMainWindow):
             self.ShapeListMax = args.ShapeListMax
         
         if args.BlockNumMax > 0:
-            self.BlockNumMax = args.BlockNumMax
+            self.BlockNumMax = 1000000
         if args.train_yaml.endswith('.yaml'):
 
             self.train_yaml = args.train_yaml        
