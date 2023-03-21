@@ -64,8 +64,8 @@ class Block_Controller(object):
 
 
     def GetNextMove(self, nextMove, GameStatus):
-        self.block_number = GameStatus["judge_info"]["block_index"]
         t1 = datetime.now()
+        self.block_number = GameStatus["judge_info"]["block_index"]
 
         # print GameStatus
         #pprint.pprint(GameStatus, width = 61, compact = True)
@@ -87,25 +87,10 @@ class Block_Controller(object):
         for i in range(11):
             cur_dy[i] = cur_board[i+1] - cur_board[i]
         #print("cur_dy : ",cur_dy)
-
-        """
-        #★★★★★★★★★★★★★★★★ to be deleted　★★★★★★★★★★★★★★★★★★★★★★★★
-        path = '..\\tetris\\game_manager\\log_board.txt'
-        with open (path, mode ="a") as f:
-            f.write("\n")
-            f.write("block_number : " + str(self.block_number))
-            for y in range(22):
-                f.write("\n")
-                for x in range(10):
-                    boardElmt = field_board[y*10+x] 
-                    f.write(str(boardElmt).replace("0","_")+" "
-                    )  
-
-            f.write("\n" + "cur_board : " + str(cur_board) + "\n")
-            f.write(str(cur_dy) + "\n")
-        #★★★★★★★★★★★★★★★★ to be deleted　★★★★★★★★★★★★★★★★★★★★★★★★
-        """
-
+        
+        self.cur_Y0 = cur_board[1]
+        self.cur_Y9 = cur_board[10]
+        
 
         #[0:"trial_id", 1:shapeindex, 2:direction, 3:Xcoord, 4:"y/n", 5:hldindex, 6:EvalValue, 7:nHoles, 8:nLines] 6:dyList
         test_cond = [["00000",0,0,0,"n",None,-100,0,0],
@@ -121,7 +106,9 @@ class Block_Controller(object):
         scenario0 =[]
         #get lowest Y to calc deleted rows
         lowY = min(cur_board[1:11])
-        self.maxY = max(cur_board)
+        self.maxY_R = max(cur_board[6:11])
+        self.maxY_L = max(cur_board[0:7])
+        self.maxY = max(self.maxY_R,self.maxY_L)
 
         #get info for each test case
         index_rnd = GameStatus["block_info"]["nextShapeList"]["element0"]["index"]
@@ -456,7 +443,7 @@ class Block_Controller(object):
         scenario4 = []
         index_rnd = GameStatus["block_info"]["nextShapeList"]["element4"]["index"]
         directions_rnd = GameStatus["block_info"]["nextShapeList"]["element4"]["direction_range"]
-        cases = min(140, len(scenario3))
+        cases = min(100, len(scenario3))
 
         for eachsce in scenario3[0:cases]:
             #get lowest Y to calc deleted rows
@@ -542,7 +529,7 @@ class Block_Controller(object):
         scenario5 = []
         index_rnd = GameStatus["block_info"]["nextShapeList"]["element5"]["index"]
         directions_rnd = GameStatus["block_info"]["nextShapeList"]["element5"]["direction_range"]
-        cases = min(140, len(scenario4))
+        cases = min(90, len(scenario4))
 
         for eachsce in scenario4[0:cases]:
             #get lowest Y to calc deleted rows
@@ -723,6 +710,14 @@ class Block_Controller(object):
         fullLines = max((new_lowY - lowY - nHoles_cml),0) #subtract cml to avoid making massive holes to inappropriately judge as fulllines
         test_cond[Round][8] = fullLines
 
+        new_maxY_R = max(absY[5:10])
+        new_maxY_L = max(absY[0:6])
+        for rnd in range(Round + 1):
+            new_maxY_L -= test_cond[rnd][8]
+            new_maxY_R -= test_cond[rnd][8]
+        new_maxY = max(new_maxY_L,new_maxY_R)
+
+
         #===== evaluate test_dy ============================
 
        
@@ -749,6 +744,18 @@ class Block_Controller(object):
             absdy -= min(test_dy[9]*-1 , test_dy[0] -2)
             if test_dy[8] <= -1:
                 capacity = 1
+
+
+        #do not pile up over hole for either edges
+        #note that capacity is valid only when Y >= 15
+        if self.cur_Y0 >= 8 and self.cur_Y9 >= 8:
+            if self.cur_Y0 < self.cur_Y9:
+                if absY[9] > self.cur_Y9:
+                    capacity = -1000
+            elif self.cur_Y0 > self.cur_Y9:
+                if absY[0] > self.cur_Y0:
+                    capacity = -1000
+ 
 
         #calc gap
         gap = 0
@@ -777,93 +784,126 @@ class Block_Controller(object):
             elif abs(test_dy[1]) >=3 or abs(test_dy[9]) >=3:
                 gap += 2
 
+        hldThree = 0
+        #calc hldThree
+        if lowest == "right":
+            if hld_index == 2:
+                hldThree = 1
+        if lowest == "left":
+            if hld_index == 3:
+                hldThree = 1
 
         sc_absdy = -1
-        sc_deepgap = -3000
-        sc_gap = -1000
+        sc_deepgap = -5000
+        sc_gap = -2000
         sc_capacity = 0
         sc_mid = -1000
-
+        sc_pileup = 0
+        sc_newmaxY = 0
+        sc_avoid_at_all_cost = -10000000
+        sc_hldThree = 5
 
         #level 2 =============================
         #"""
-        if self.block_number >= 177:
-            fulLscore = [0, 1000, 4000, 10000, 20000]
+        if self.block_number >= 175:
+            fulLscore = [0, 1500, 4000, 10000, 20000]
             sc_nHoles_cml = -50
             sc_hldOne = 100
             sc_mid = -10
+            sc_deepgap = 0
 
-        elif self.block_number >= 175:
-            fulLscore = [0, -10, 3000, 10000, 20000]
-            sc_nHoles_cml = -800
-            sc_hldOne = 100
-            sc_mid = -10
+            if new_maxY >= 20:
+                sc_newmaxY = sc_avoid_at_all_cost
 
-        elif self.maxY >= 15 or (self.maxY >= 10 and self.block_number >= 170):
-            fulLscore = [0, 10, 3000, 10000, 20000]
-            sc_nHoles_cml = -800
-            sc_hldOne = 2000
-            sc_capacity = 7
-            
-        elif self.maxY >= 10:
-            fulLscore = [0, -10, 3000, 10000, 20000]
+        elif self.maxY >= 19:
+            fulLscore = [0, 5000, 20000, 70000, 120000]
+            if self.maxY_L >= 19 and test_cond[Round][3] <=5:
+                fulLscore[4] = sc_avoid_at_all_cost
+            if self.maxY_R >= 19 and test_cond[Round][3] >=5:
+                fulLscore[4] = sc_avoid_at_all_cost
             sc_nHoles_cml = -1000
-            sc_hldOne = 2000
+            sc_hldOne = 1000
             sc_capacity = 7
+            if new_maxY >= 20:
+                sc_newmaxY += sc_avoid_at_all_cost
+            if self.maxY_L >= 20 and test_cond[Round][3] <=5:
+                sc_newmaxY += sc_avoid_at_all_cost #almost impossible to place
+            if self.maxY_R >= 20 and test_cond[Round][3] >=5:
+                sc_newmaxY += sc_avoid_at_all_cost #almost impossible to place
+
+            if test_cond[Round][1] == 1 and new_maxY_L >= 19 and test_cond[Round][3] <=5:
+                sc_newmaxY += sc_avoid_at_all_cost
+            if test_cond[Round][1] == 1 and new_maxY_R >= 19 and test_cond[Round][3] >=5:
+                sc_newmaxY += sc_avoid_at_all_cost
+
+
+        elif self.maxY >= 15 or (self.maxY >= 9 and self.block_number >= 170):
+            fulLscore = [0, 2500, 20000, 70100, 120100]
+            sc_nHoles_cml = -2000
+            sc_hldOne = 3000
+            sc_capacity = 7
+            if lowest == "mid":
+                if new_maxY >= 19:
+                    sc_newmaxY = sc_avoid_at_all_cost
+            elif lowest == "right":
+                if new_maxY_R >= 19:
+                    sc_newmaxY = sc_avoid_at_all_cost
+            elif lowest == "left":
+                if new_maxY_L >= 19:
+                    sc_newmaxY = sc_avoid_at_all_cost
+
+            if new_maxY >= 20:
+                sc_newmaxY += sc_avoid_at_all_cost
+            if self.maxY_L >= 20 and test_cond[Round][3] <=5:
+                sc_newmaxY += sc_avoid_at_all_cost #almost impossible to place
+            if self.maxY_R >= 20 and test_cond[Round][3] >=5:
+                sc_newmaxY += sc_avoid_at_all_cost #almost impossible to place
+
+            if test_cond[Round][1] == 1 and new_maxY_L >= 19 and test_cond[Round][3] <=5:
+                sc_newmaxY += sc_avoid_at_all_cost
+            if test_cond[Round][1] == 1 and new_maxY_R >= 19 and test_cond[Round][3] >=5:
+                sc_newmaxY += sc_avoid_at_all_cost
+
+        elif self.maxY >= 12:
+            fulLscore = [0, -100, -10, 10000, 70000]
+            sc_nHoles_cml = -20000
+            sc_hldOne = 2000
+            sc_hldThree = 0
+            sc_capacity = 5
 
         else:
-            fulLscore = [0,-3000,-1000,-300, 20000]
-            sc_nHoles_cml = -10000
-            sc_hldOne = 3000
+            fulLscore = [0,-3100,-2000,-300, 30000]
+            sc_nHoles_cml = -40000
+            sc_hldOne = 3500
+            sc_hldThree = 0
             sc_capacity = 0
+            sc_mid = -4000
         #"""
 
-
-        #level 3 =============================
-        """
-        if self.block_number >= 177:
-            fulLscore = [0, 1000, 4000, 10000, 20000]
-            sc_nHoles_cml = -50
-            sc_hldOne = 100
-            sc_mid = -10
-
-        elif self.block_number >= 175:
-            fulLscore = [0, -10, 3000, 10000, 20000]
-            sc_nHoles_cml = -800
-            sc_hldOne = 100
-            sc_mid = -10
-
-        elif self.maxY >= 16:
-            fulLscore = [0, 10, 20000, 20000, 10000]
-            sc_nHoles_cml = -200
-            sc_hldOne = 2000
-            sc_capacity = 7
-
-        elif self.maxY >= 10:
-            fulLscore = [0, 10, 3000, 10000, 20000]
-            sc_nHoles_cml = -2000
-            sc_hldOne = 2000
-            sc_capacity = 7
-
-        else:
-            fulLscore = [0,-3000,-1000,-300, 20000]
-            sc_nHoles_cml = -10000
-            sc_hldOne = 3000
-            sc_capacity = 0
-        """
-        #calc score
         score = 0
         for rnd in range(Round + 1):
             score += fulLscore[test_cond[rnd][8]]
+            if test_cond[rnd][8] != 0:
+                score -= rnd*2 #earlier the better
+
         score += absdy * sc_absdy
         score += deepgap * sc_deepgap
         score += gap * sc_gap
         score += nHoles_cml * sc_nHoles_cml
         score += capacity * sc_capacity
+        score += hldThree * sc_hldThree
+
         if lowest == "mid":
             score += sc_mid
         if hld_index == 1:
             score += sc_hldOne
+        score += sc_pileup
+        score += sc_newmaxY
+
+        #do not select if prior rounds have sc_avoid
+        for rnd in range(Round):
+            if test_cond[rnd][6] <= sc_avoid_at_all_cost + 1000000:
+                score += test_cond[rnd][6]
 
         #evaluation for fullLines is cumulative
 
@@ -878,4 +918,3 @@ class Block_Controller(object):
 
 
 BLOCK_CONTROLLER = Block_Controller()
-               
