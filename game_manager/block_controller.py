@@ -443,7 +443,7 @@ class Block_Controller(object):
         scenario4 = []
         index_rnd = GameStatus["block_info"]["nextShapeList"]["element4"]["index"]
         directions_rnd = GameStatus["block_info"]["nextShapeList"]["element4"]["direction_range"]
-        cases = min(100, len(scenario3))
+        cases = min(120, len(scenario3))
 
         for eachsce in scenario3[0:cases]:
             #get lowest Y to calc deleted rows
@@ -529,7 +529,7 @@ class Block_Controller(object):
         scenario5 = []
         index_rnd = GameStatus["block_info"]["nextShapeList"]["element5"]["index"]
         directions_rnd = GameStatus["block_info"]["nextShapeList"]["element5"]["direction_range"]
-        cases = min(90, len(scenario4))
+        cases = min(120, len(scenario4))
 
         for eachsce in scenario4[0:cases]:
             #get lowest Y to calc deleted rows
