@@ -44,9 +44,10 @@ board,  board,  board,  board,  board,  board, board,  board,  board ]
 blockorder = [6,7,4,2,3,1,5]
 
 
-def dfs(currentboard,Block,foundflag):
+def dfs(currentboard,Block,status):
+    global foundflag
     if foundflag == True:
-        pass
+            pass
     else:
         block = Block
         block += 1
@@ -56,7 +57,8 @@ def dfs(currentboard,Block,foundflag):
             printflag1 = CheckTwoBlocks(currentboard = status[maxblock])
             printflag2 = CheckClearRows(currentboard = status[maxblock])
 
-            if printflag1 == True and printflag2 == True:
+            if printflag1 == True and printflag2 == True and foundflag == False:
+                print("found one")
                 path = '..\\tetris\\game_manager\\log_art.txt'
                 with open (path, mode ="a") as f:
                     f.write("xs_" + str(x1)+str(shape1)+str(x2)+str(shape2)+ " = " + str(status[0])+ "\n")            
@@ -100,7 +102,7 @@ def dfs(currentboard,Block,foundflag):
                                 contflag3 = CheckHoles(currentboard = status[block])
 
                                 if contflag1 == True and contflag2== True and contflag3 == True:
-                                    dfs(currentboard = status[block],Block = block,foundflag = foundflag)
+                                    dfs(currentboard = status[block],Block = block,status = status)
                                     status[0][block-1] = [0,0,0,1]
                                         
                                 else:
@@ -185,11 +187,30 @@ def CheckClearRows(currentboard):
                 break
     return check
 
+def writeNone():
+    path = '..\\tetris\\game_manager\\log_art.txt'
+    with open (path, mode ="a") as f:
+        f.write("xs_" + str(x1)+str(shape1)+str(x2)+str(shape2)+ ":" + "False," + "\n")
+
+
+def search_artlib():
+    global foundflag
+    foundflag = False
+    default_status = copy.deepcopy(status)
+    print(x1,shape1,x2,shape2)
+
+    ans = dfs(currentboard = status[1],Block = block, status = default_status)
+    if foundflag == False:
+        ans = writeNone()
+
+
+
 
 maxblock = 8
 block = 0
-x1, shape1, x2, shape2 = 2,4,6,4
-foundflag = False
-
-ans = dfs(currentboard = status[1],Block = block, foundflag = foundflag)
-print("done")
+for x1 in range(10):
+    for x2 in range(x1+1,10-x1+1):
+        for shape1 in blockorder:
+            for shape2 in blockorder:
+                ans = search_artlib()
+print("All done")
