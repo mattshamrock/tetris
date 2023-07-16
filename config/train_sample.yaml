@@ -10,14 +10,14 @@ common:
   predict_weight: outputs/YYYY-MM-DD-hh-mm-ss/trained_model/best_weight.pt
 
   #### 第2model 有効
-  weight2_available: False
+  #weight2_available: False
   #### 第2model
-  predict_weight2: outputs/YYYY-MM-DD-hh-mm-ss/trained_model/best_weight.pt
+  #predict_weight2: outputs/YYYY-MM-DD-hh-mm-ss/trained_model/best_weight.pt
 
   #### model 切り替えポイント (最も高い穴の位置が下記より低いとき)
-  predict_weight2_enable_index: 5
+  #predict_weight2_enable_index: 5
   #### model 戻しポイント (最も高い穴の位置下記より高いとき)
-  predict_weight2_disable_index: 10
+  #predict_weight2_disable_index: 10
 model:
   name: DQN # 学習方式 (MLP DQN)
   finetune: False # 以前の学習結果を利用する (True False)
@@ -67,8 +67,6 @@ train:
   hole_top_limit_reward: 0.00001  # 穴の上の積み上げペナルティ #DQN限定
   hole_top_limit_height: 5 # 穴の上の積み上げペナルティ下限絶対高さ、この高さより上のときのみペナルティ有効 (22: 無効, -1:制限なし)
   hole_top_limit: 1 # 穴の上の積み上げペナルティ 穴の位置が左記の相対高さより高いときのみ
-
-  over3_diff_penalty: 0.01 # 左端以外で3段以上の段差を作った場合のペナルティ
 
   move_down_flag: 0 # Move Down 有効化 #DQN限定
 

@@ -4,7 +4,7 @@
 import sys
 from PyQt5.QtWidgets import QMainWindow, QFrame, QDesktopWidget, QApplication, QHBoxLayout, QLabel
 from PyQt5.QtCore import Qt, QBasicTimer, pyqtSignal
-from PyQt5.QtGui import QPainter, QColor
+from PyQt5.QtGui import QPainter, QColor, QFont
 
 from board_manager import BOARD_DATA, Shape
 from block_controller import BLOCK_CONTROLLER
@@ -18,7 +18,7 @@ import pprint
 ################################
 # Option 取得
 ###############################
-def get_option(game_time, mode, drop_interval, random_seed, obstacle_height, obstacle_probability, resultlogjson, train_yaml, predict_weight, user_name, ShapeListMax, BlockNumMax, art_config_filepath):
+def get_option(game_time, mode, nextShapeMode, drop_interval, random_seed, obstacle_height, obstacle_probability, all_block_clear_score, resultlogjson, train_yaml, predict_weight, user_name, ShapeListMax, BlockNumMax, art_config_filepath):
     argparser = ArgumentParser()
     argparser.add_argument('--game_time', type=int,
                            default=game_time,
@@ -26,6 +26,9 @@ def get_option(game_time, mode, drop_interval, random_seed, obstacle_height, obs
     argparser.add_argument('--mode', type=str,
                            default=mode,
                            help='Specify mode (keyboard/gamepad/sample/train/art) if necessary')
+    argparser.add_argument('--nextShapeMode', type=str,
+                           default=nextShapeMode,
+                           help='Specify nextShapeMode (default/hate) if necessary')
     argparser.add_argument('--drop_interval', type=int,
                            default=drop_interval,
                            help='Specify drop_interval(s)')
@@ -38,6 +41,9 @@ def get_option(game_time, mode, drop_interval, random_seed, obstacle_height, obs
     argparser.add_argument('--obstacle_probability', type=int,
                            default=obstacle_probability,
                            help='Specify obstacle probability')
+    argparser.add_argument('--all_block_clear_score', type=int,
+                           default=all_block_clear_score,
+                           help='Specify all_block_clear_score')
     argparser.add_argument('--resultlogjson', type=str,
                            default=resultlogjson,
                            help='result json log file path')
@@ -75,6 +81,7 @@ class Game_Manager(QMainWindow):
     LINE_SCORE_3 = 700
     LINE_SCORE_4 = 1300
     GAMEOVER_SCORE = -500
+    ALL_BLOCK_CLEAR_SCORE = 0 # specified by execute option
 
     ###############################################
     # 初期化
@@ -89,6 +96,7 @@ class Game_Manager(QMainWindow):
         self.game_time = -1
         self.block_index = 0
         self.mode = "default"
+        self.nextShapeMode = "default"
         self.drop_interval = 1000
         self.random_seed = time.time() * 10000000 # 0
         self.obstacle_height = 0
@@ -103,10 +111,12 @@ class Game_Manager(QMainWindow):
         
         args = get_option(self.game_time,
                           self.mode,
+                          self.nextShapeMode,
                           self.drop_interval,
                           self.random_seed,
                           self.obstacle_height,
                           self.obstacle_probability,
+                          self.ALL_BLOCK_CLEAR_SCORE,
                           self.resultlogjson,
                           self.train_yaml,
                           self.predict_weight,
@@ -116,8 +126,10 @@ class Game_Manager(QMainWindow):
                           self.art_config_filepath)
         if args.game_time >= 0:
             self.game_time = args.game_time
-        if args.mode in ("keyboard", "gamepad", "sample", "art", "train", "predict", "train_sample", "predict_sample", "train_sample2", "predict_sample2"):
+        if args.mode in ("keyboard", "gamepad", "sample", "art", "train", "predict", "train_sample", "predict_sample", "train_sample2", "predict_sample2", "train_sample3", "predict_sample3"):
             self.mode = args.mode
+        if args.nextShapeMode in ("default", "hate"):
+            self.nextShapeMode = args.nextShapeMode
         if args.drop_interval >= 0:
             self.drop_interval = args.drop_interval
         if args.seed >= 0:
@@ -126,6 +138,8 @@ class Game_Manager(QMainWindow):
             self.obstacle_height = args.obstacle_height
         if args.obstacle_probability >= 0:
             self.obstacle_probability = args.obstacle_probability
+        if args.all_block_clear_score != 0:
+            self.ALL_BLOCK_CLEAR_SCORE = args.all_block_clear_score
         if len(args.resultlogjson) != 0:
             self.resultlogjson = args.resultlogjson
         if len(args.user_name) != 0:
@@ -164,6 +178,7 @@ class Game_Manager(QMainWindow):
         random_seed_Nextshape = self.random_seed
         self.tboard = Board(self, self.gridSize,
                             self.game_time,
+                            self.nextShapeMode,
                             random_seed_Nextshape,
                             self.obstacle_height,
                             self.obstacle_probability,
@@ -256,6 +271,7 @@ class Game_Manager(QMainWindow):
         self.tboard.linescore = 0
         self.tboard.line = 0
         self.tboard.line_score_stat = [0, 0, 0, 0]
+        self.tboard.line_score_stat_len = [0, 0, 0, 0]
         self.tboard.start_time = time.time()
         ##画面ボードと現テトリミノ情報をクリア
         BOARD_DATA.clear()
@@ -312,13 +328,19 @@ class Game_Manager(QMainWindow):
                     # sample train/predict
                     # import block_controller_train_sample, it's necessary to install pytorch to use.
                     from machine_learning.block_controller_train_sample import BLOCK_CONTROLLER_TRAIN_SAMPLE as BLOCK_CONTROLLER_TRAIN
-                    self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file=self.train_yaml,weight=self.predict_weight)
+                    self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file="config/train_sample.yaml",weight=self.predict_weight)
                     
                 elif self.mode == "train_sample2" or self.mode == "predict_sample2":
                     # sample train/predict
                     # import block_controller_train_sample, it's necessary to install pytorch to use.
                     from machine_learning.block_controller_train_sample2 import BLOCK_CONTROLLER_TRAIN_SAMPLE2 as BLOCK_CONTROLLER_TRAIN
                     self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file="config/train_sample2.yaml",weight=self.predict_weight)
+                    
+                elif self.mode == "train_sample3" or self.mode == "predict_sample3":
+                    # sample train/predict
+                    # import block_controller_train_sample, it's necessary to install pytorch to use.
+                    from machine_learning.block_controller_train_sample3 import BLOCK_CONTROLLER_TRAIN_SAMPLE3 as BLOCK_CONTROLLER_TRAIN
+                    self.nextMove = BLOCK_CONTROLLER_TRAIN.GetNextMove(nextMove, GameStatus,yaml_file="config/train_sample3.yaml",weight=self.predict_weight)
                     
                 elif self.mode == "train" or self.mode == "predict":
                     # train/predict
@@ -365,7 +387,9 @@ class Game_Manager(QMainWindow):
                 use_hold_function = self.nextMove["strategy"]["use_hold_function"]
 
                 # if use_hold_function
+                self.tboard.hold_isdone = False
                 if use_hold_function == "y":
+                    self.tboard.hold_isdone = True
                     isExchangeHoldShape = BOARD_DATA.exchangeholdShape()
                     if isExchangeHoldShape == False:
                         # if isExchangeHoldShape is False, this means no holdshape exists. 
@@ -474,6 +498,20 @@ class Game_Manager(QMainWindow):
         # 同時消去数をカウント
         if removedlines > 0:
             self.tboard.line_score_stat[removedlines - 1] += 1
+            self.tboard.line_score_stat_len[removedlines - 1] += 1
+        else:
+            # 連続して消去していない場合の初期化
+            self.tboard.line_score_stat_len = [0, 0, 0, 0]
+        # perfect clear判定
+        self.tboard.allblockclear_isdone = False
+        if removedlines > 0:
+            width = BOARD_DATA.width
+            height = BOARD_DATA.height
+            data = BOARD_DATA.getData()
+            if data.count(0) == width*height:
+                self.tboard.allblockclear_isdone = True
+                self.tboard.score += self.ALL_BLOCK_CLEAR_SCORE
+                self.tboard.all_block_clear_cnt += 1
 
     ###############################################
     # ゲーム情報の取得
@@ -516,6 +554,7 @@ class Game_Manager(QMainWindow):
                         "elapsed_time":"none",
                         "game_time":"none",
                         "gameover_count":"none",
+                        "all_block_clear_count":"none",
                         "score":"none",
                         "line":"none",
                         "block_index":"none",
@@ -532,6 +571,7 @@ class Game_Manager(QMainWindow):
                           "line3":"none",
                           "line4":"none",
                           "gameover":"none",
+                          "all_block_clear":"none",
                         },
                         "shape_info": {
                           "shapeNone": {
@@ -568,6 +608,7 @@ class Game_Manager(QMainWindow):
                           },
                         },
                         "line_score_stat":"none",
+                        "line_score_stat_len":"none",
                         "shape_info_stat":"none",
                         "random_seed":"none",
                         "obstacle_height":"none",
@@ -613,6 +654,7 @@ class Game_Manager(QMainWindow):
         status["judge_info"]["elapsed_time"] = round(time.time() - self.tboard.start_time, 3)
         status["judge_info"]["game_time"] = self.game_time
         status["judge_info"]["gameover_count"] = self.tboard.reset_cnt
+        status["judge_info"]["all_block_clear_count"] = self.tboard.all_block_clear_cnt
         status["judge_info"]["score"] = self.tboard.score
         status["judge_info"]["line"] = self.tboard.line
         status["judge_info"]["block_index"] = self.block_index
@@ -622,12 +664,16 @@ class Game_Manager(QMainWindow):
         status["debug_info"]["dropdownscore"] = self.tboard.dropdownscore
         status["debug_info"]["linescore"] = self.tboard.linescore
         status["debug_info"]["line_score_stat"] = self.tboard.line_score_stat
+        status["debug_info"]["line_score_stat_len"] = self.tboard.line_score_stat_len
         status["debug_info"]["shape_info_stat"] = BOARD_DATA.shape_info_stat
+        status["debug_info"]["hold_isdone"] = self.tboard.hold_isdone
+        status["debug_info"]["allblockclear_isdone"] = self.tboard.allblockclear_isdone
         status["debug_info"]["line_score"]["line1"] = Game_Manager.LINE_SCORE_1
         status["debug_info"]["line_score"]["line2"] = Game_Manager.LINE_SCORE_2
         status["debug_info"]["line_score"]["line3"] = Game_Manager.LINE_SCORE_3
         status["debug_info"]["line_score"]["line4"] = Game_Manager.LINE_SCORE_4
         status["debug_info"]["line_score"]["gameover"] = Game_Manager.GAMEOVER_SCORE
+        status["debug_info"]["line_score"]["all_block_clear"] = self.ALL_BLOCK_CLEAR_SCORE
         status["debug_info"]["shape_info"]["shapeNone"]["index"] = Shape.shapeNone
         status["debug_info"]["shape_info"]["shapeI"]["index"] = Shape.shapeI
         status["debug_info"]["shape_info"]["shapeI"]["color"] = "red"
@@ -661,6 +707,7 @@ class Game_Manager(QMainWindow):
                           "line3":"none",
                           "line4":"none",
                           "gameover":"none",
+                          "all_block_clear":"none",
                         },
                         "shape_info": {
                           "shapeNone": {
@@ -697,7 +744,10 @@ class Game_Manager(QMainWindow):
                           },
                         },
                         "line_score_stat":"none",
+                        "line_score_stat_len":"none",
                         "shape_info_stat":"none",
+                        "hold_isdone":"none",
+                        "allblockclear_isdone":"none",
                         "random_seed":"none",
                         "obstacle_height":"none",
                         "obstacle_probability":"none",
@@ -707,6 +757,7 @@ class Game_Manager(QMainWindow):
                         "elapsed_time":"none",
                         "game_time":"none",
                         "gameover_count":"none",
+                        "all_block_clear_count":"none",
                         "score":"none",
                         "line":"none",
                         "block_index":"none",
@@ -717,12 +768,16 @@ class Game_Manager(QMainWindow):
         # update status
         ## debug_info
         status["debug_info"]["line_score_stat"] = self.tboard.line_score_stat
+        status["debug_info"]["line_score_stat_len"] = self.tboard.line_score_stat_len
         status["debug_info"]["shape_info_stat"] = BOARD_DATA.shape_info_stat
+        status["debug_info"]["hold_isdone"] = self.tboard.hold_isdone
+        status["debug_info"]["allblockclear_isdone"] = self.tboard.allblockclear_isdone
         status["debug_info"]["line_score"]["line1"] = Game_Manager.LINE_SCORE_1
         status["debug_info"]["line_score"]["line2"] = Game_Manager.LINE_SCORE_2
         status["debug_info"]["line_score"]["line3"] = Game_Manager.LINE_SCORE_3
         status["debug_info"]["line_score"]["line4"] = Game_Manager.LINE_SCORE_4
         status["debug_info"]["line_score"]["gameover"] = Game_Manager.GAMEOVER_SCORE
+        status["debug_info"]["line_score"]["all_block_clear"] = self.ALL_BLOCK_CLEAR_SCORE
         status["debug_info"]["shape_info"]["shapeNone"]["index"] = Shape.shapeNone
         status["debug_info"]["shape_info"]["shapeI"]["index"] = Shape.shapeI
         status["debug_info"]["shape_info"]["shapeI"]["color"] = "red"
@@ -745,6 +800,7 @@ class Game_Manager(QMainWindow):
         status["judge_info"]["elapsed_time"] = round(time.time() - self.tboard.start_time, 3)
         status["judge_info"]["game_time"] = self.game_time
         status["judge_info"]["gameover_count"] = self.tboard.reset_cnt
+        status["judge_info"]["all_block_clear_count"] = self.tboard.all_block_clear_cnt
         status["judge_info"]["score"] = self.tboard.score
         status["judge_info"]["line"] = self.tboard.line
         status["judge_info"]["block_index"] = self.block_index
@@ -794,6 +850,8 @@ class Game_Manager(QMainWindow):
             # 消去ライン数と落下数によりスコア計算
             self.UpdateScore(removedlines, dropdownlines)
         elif key == Qt.Key_C:
+            print("cc!!")
+            self.tboard.hold_isdone = True
             BOARD_DATA.exchangeholdShape()
         else:
             # スタート前はキーキャプチャしない
@@ -888,6 +946,7 @@ class SidePanel(QFrame):
         painter.drawLine(0, height_offset,
                          self.width(), height_offset)
         painter.drawText(0, self.height(), 'HOLD');
+        # draw
         holdShapeClass, holdShapeIdx, holdShapeRange = BOARD_DATA.getholdShapeData()
         if holdShapeClass != None:
             # if holdShape exists, try to draw
@@ -910,29 +969,33 @@ class Board(QFrame):
     ###############################################
     # 初期化
     ###############################################
-    def __init__(self, parent, gridSize, game_time, random_seed, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath):
+    def __init__(self, parent, gridSize, game_time, nextShapeMode, random_seed, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath):
         super().__init__(parent)
         self.setFixedSize(gridSize * BOARD_DATA.width, gridSize * BOARD_DATA.height)
         self.gridSize = gridSize
         self.game_time = game_time
-        self.initBoard(random_seed, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath)
+        self.initBoard(nextShapeMode, random_seed, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath)
 
     ###############################################
     # 画面ボード初期化
     ###############################################
-    def initBoard(self, random_seed_Nextshape, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath):
+    def initBoard(self, nextShapeMode, random_seed_Nextshape, obstacle_height, obstacle_probability, ShapeListMax, art_config_filepath):
         self.score = 0
         self.dropdownscore = 0
         self.linescore = 0
         self.line = 0
         self.line_score_stat = [0, 0, 0, 0]
+        self.line_score_stat_len = [0, 0, 0, 0]
+        self.hold_isdone = False
+        self.allblockclear_isdone = False
+        self.all_block_clear_cnt = 0
         self.reset_cnt = 0
         self.start_time = time.time() 
         ##画面ボードと現テトリミノ情報をクリア
         BOARD_DATA.clear()
         BOARD_DATA.init_randomseed(random_seed_Nextshape)
         BOARD_DATA.init_obstacle_parameter(obstacle_height, obstacle_probability)
-        BOARD_DATA.init_shape_parameter(ShapeListMax)
+        BOARD_DATA.init_shape_parameter(ShapeListMax, nextShapeMode)
         BOARD_DATA.init_art_config(art_config_filepath)
 
     ###############################################
@@ -957,6 +1020,41 @@ class Board(QFrame):
         painter.drawLine(self.width()-1, 0, self.width()-1, self.height())
         painter.setPen(QColor(0xCCCCCC))
         painter.drawLine(self.width(), 0, self.width(), self.height())
+        # Draw text
+        painter.setPen(QColor(0x777777))
+        font = painter.font();
+        font.setPixelSize(30);
+        painter.setFont(font);
+
+        # Draw removed_line/LEN/hold/all_block_clear
+        blank_text = "              "
+        text = blank_text
+        # removed_line
+        for i in range(4):
+            val = self.line_score_stat_len[i]
+            if val != 0:
+                text = str(i+1) + 'LINE !!'
+                linen = "line" + str(i+1)
+                text += '+' + str(GAME_MANEGER.getGameStatus()["debug_info"]["line_score"][linen])
+                break
+        painter.drawText(10, 120, text);
+        # LEN
+        text = blank_text
+        for i in range(4):
+            val = self.line_score_stat_len[i]
+            if val > 1:
+                text = str(val) + 'LEN!!'
+        painter.drawText(65, 155, text);
+        # Hold
+        text = blank_text
+        if self.hold_isdone == True:
+            text = 'HOLD !!'
+        painter.drawText(65, 190, text);
+        # all_block_clear
+        text = blank_text
+        if self.allblockclear_isdone == True:
+            text = 'All Block Clear !!'
+        painter.drawText(10, 190, text);
 
     ###############################################
     # ログファイル出力
@@ -1011,6 +1109,7 @@ class Board(QFrame):
             line_score_stat = GameStatus["debug_info"]["line_score_stat"]
             line_Score = GameStatus["debug_info"]["line_score"]
             gameover_count = GameStatus["judge_info"]["gameover_count"]
+            all_block_clear_count = GameStatus["judge_info"]["all_block_clear_count"]
             score = GameStatus["judge_info"]["score"]
             dropdownscore = GameStatus["debug_info"]["dropdownscore"]
             print("  1 line: " + str(line_Score["line1"]) + " * " + str(line_score_stat[0]) + " = " + str(line_Score["line1"] * line_score_stat[0]))
@@ -1019,6 +1118,7 @@ class Board(QFrame):
             print("  4 line: " + str(line_Score["line4"]) + " * " + str(line_score_stat[3]) + " = " + str(line_Score["line4"] * line_score_stat[3]))
             print("  dropdownscore: " + str(dropdownscore))
             print("  gameover: : " + str(line_Score["gameover"]) + " * " + str(gameover_count) + " = " + str(line_Score["gameover"] * gameover_count))
+            print("  all_block_clear : " + str(line_Score["all_block_clear"]) + " * " + str(all_block_clear_count) + " = " + str(line_Score["all_block_clear"] * all_block_clear_count))
 
             print("##### ###### #####")
             print("")
