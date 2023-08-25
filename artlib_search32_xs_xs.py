@@ -328,7 +328,7 @@ def adjust_dotorder_for_smallest(dotorder):
 
 
 def search_artlib(board):
-    # Return a board that leaves the two blocks
+    # Return a board that allows the two blocks to remain
     board = search_filledboard(board = board)
     if board != False:
         if board[0].count(0) > 0:
@@ -389,7 +389,7 @@ for x1 in range(10):
 
                 if artdict[key] == False:
                     board = copy.deepcopy(board_init)
-                    # Return a procedure that leaves the two blocks. Return False if not found.
+                    # Return a procedure that allows the two blocks to remain. Return False if not found.
                     ans = search_artlib(board = board)
                     print(ans)
                     with open (path, mode ="a") as f:
@@ -399,14 +399,3 @@ for x1 in range(10):
                         f.write('"'+ key + '":' + str(artdict[key]) + ","+"\n")
 
 print("All done")
-#"""
-
-"""
-x1 = 9
-shape1 = 6
-x2 = 0
-shape2 = 6
-board = copy.deepcopy(board_init)
-ans = search_artlib(board = board)
-print(ans)
-"""
